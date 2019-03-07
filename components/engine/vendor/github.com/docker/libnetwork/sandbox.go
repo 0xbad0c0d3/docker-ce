@@ -134,6 +134,7 @@ type containerConfig struct {
 
 const (
 	resolverIPSandbox = "127.0.0.11"
+	hostDockerInternal = "host.docker.internal"
 )
 
 func (sb *sandbox) ID() string {
@@ -441,6 +442,13 @@ func (sb *sandbox) ResolveIP(ip string) string {
 	var svc string
 	logrus.Debugf("IP To resolve %v", ip)
 
+	gatewayIP4 := net.IP(sb.osSbox.Info().Gateway())
+	reversedGW := net.IPv4(gatewayIP4[15], gatewayIP4[14], gatewayIP4[13], gatewayIP4[12])
+
+	if reversedGW.Equal(net.ParseIP(ip)) {
+		return hostDockerInternal
+	}
+
 	for _, ep := range sb.getConnectedEndpoints() {
 		n := ep.getNetwork()
 		svc = n.ResolveIP(ip)
@@ -533,6 +541,18 @@ func (sb *sandbox) ResolveName(name string, ipType int) ([]net.IP, bool) {
 	name = strings.TrimSuffix(name, ".")
 	reqName := []string{name}
 	networkName := []string{""}
+
+	if strings.Compare(name, hostDockerInternal) == 0 {
+		hostIP := make([]net.IP, 0)
+		if ipType == types.IPv4 {
+			gatewayIP := sb.osSbox.Info().Gateway()
+			return append(hostIP, gatewayIP), true
+		} else {
+			gatewayIP := sb.osSbox.Info().GatewayIPv6()
+			return append(hostIP, gatewayIP), false
+		}
+	}
+
 
 	if strings.Contains(name, ".") {
 		var i int
